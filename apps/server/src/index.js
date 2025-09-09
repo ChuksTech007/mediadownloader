@@ -80,10 +80,15 @@ app.get("/api/resolve", (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
 
+  // Base args
   const args = ["-J", "--no-warnings", "--no-check-certificate", url];
+
+  // Use cookies.txt if exists, else fallback to browser cookies (local only)
   const cookiesPath = path.join(__dirname, "cookies.txt");
   if (fs.existsSync(cookiesPath)) {
     args.push("--cookies", cookiesPath);
+  } else {
+    args.push("--cookies-from-browser", "chrome");
   }
 
   const proc = spawn(ytDlpPath, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -100,11 +105,9 @@ app.get("/api/resolve", (req, res) => {
     console.error("yt-dlp stderr:", data.toString());
   });
 
-  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("close", (code) => {
-    if (res.headersSent) {
-      return;
-    }
+    if (res.headersSent) return;
+
     if (code !== 0) {
       return res.status(500).json({
         error: "yt-dlp failed",
@@ -130,7 +133,6 @@ app.get("/api/resolve", (req, res) => {
     }
   });
 
-  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("error", (err) => {
     console.error("Spawn error:", err.message);
     if (!res.headersSent) {
@@ -159,6 +161,8 @@ app.get("/api/download", (req, res) => {
   const cookiesPath = path.join(__dirname, "cookies.txt");
   if (fs.existsSync(cookiesPath)) {
     args.push("--cookies", cookiesPath);
+  } else {
+    args.push("--cookies-from-browser", "chrome");
   }
 
   const proc = spawn(ytDlpPath, args, { stdio: ["ignore", "pipe", "pipe"] });
