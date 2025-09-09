@@ -63,7 +63,7 @@ export default function App() {
   const [error, setError] = useState(null);
 
 
-  const serverUrl = "https://mediadownloaderapp.onrender.com";
+  const serverUrl = "https://fastdownloader-backend.onrender.com";
   // const serverUrl = "http://localhost:5000";
 
   async function handleResolve(e) {
