@@ -92,7 +92,11 @@ app.get("/api/resolve", (req, res) => {
     console.error("yt-dlp stderr:", data.toString());
   });
 
+  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("close", (code) => {
+    if (res.headersSent) {
+      return;
+    }
     if (code !== 0) {
       return res.status(500).json({
         error: "yt-dlp failed",
@@ -118,9 +122,12 @@ app.get("/api/resolve", (req, res) => {
     }
   });
 
+  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("error", (err) => {
     console.error("Spawn error:", err.message);
-    res.status(500).json({ error: "Failed to run yt-dlp" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to run yt-dlp" });
+    }
   });
 });
 
