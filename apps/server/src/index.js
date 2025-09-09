@@ -9,9 +9,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors({
-  origin: ["https://mediadownloader-api.onrender.com", "http://localhost:5173"]
-}));
+app.use(
+  cors({
+    origin: [
+      "https://mediadownloader-api.onrender.com",
+      "http://localhost:5173",
+    ],
+  })
+);
 app.use(express.json());
 
 // Ensure downloads folder exists
@@ -21,13 +26,30 @@ if (!fs.existsSync(downloadsDir)) {
 }
 app.use("/downloads", express.static(downloadsDir));
 
-// Detect yt-dlp binary path
-const binaryName = process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp";
-const ytDlpPath = path.join(__dirname, binaryName);
-if (!fs.existsSync(ytDlpPath)) {
-  console.error(`❌ yt-dlp binary not found at: ${ytDlpPath}`);
-  process.exit(1);
+// ---------- Detect yt-dlp path ----------
+function getYtDlpCommand() {
+  // Windows
+  if (process.platform === "win32") {
+    const exePath = path.join(__dirname, "yt-dlp.exe");
+    if (fs.existsSync(exePath)) return exePath;
+  }
+
+  // Linux (Render) → use included binary
+  const linuxPath = path.join(__dirname, "yt-dlp");
+  if (fs.existsSync(linuxPath)) return linuxPath;
+
+  // Fallback → python module (requires yt-dlp in requirements.txt)
+  return "python3";
 }
+
+function buildArgs(url, extra = []) {
+  if (ytDlpPath === "python3") {
+    return ["-m", "yt_dlp", ...extra, url];
+  }
+  return [...extra, url];
+}
+
+const ytDlpPath = getYtDlpCommand();
 console.log("✅ yt-dlp binary is ready from path:", ytDlpPath);
 
 // ---------- Utility: Pick options ----------
@@ -72,57 +94,53 @@ app.get("/api/resolve", (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "Missing url" });
 
-  const args = ["-J", "--no-warnings", "--no-check-certificate", url];
+  const args = buildArgs(url, ["-J", "--no-warnings", "--no-check-certificate"]);
   const cookiesPath = path.join(__dirname, "cookies.txt");
-  if (fs.existsSync(cookiesPath)) {
-    args.push("--cookies", cookiesPath);
-  }
+  if (fs.existsSync(cookiesPath)) args.push("--cookies", cookiesPath);
 
   const proc = spawn(ytDlpPath, args, { stdio: ["ignore", "pipe", "pipe"] });
 
   let rawOutput = "";
   let errOutput = "";
 
-  proc.stdout.on("data", (data) => {
-    rawOutput += data.toString();
-  });
-
+  proc.stdout.on("data", (data) => (rawOutput += data.toString()));
   proc.stderr.on("data", (data) => {
     errOutput += data.toString();
     console.error("yt-dlp stderr:", data.toString());
   });
 
-  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("close", (code) => {
-    if (res.headersSent) {
-      return;
-    }
+    if (res.headersSent) return;
+
     if (code !== 0) {
       return res.status(500).json({
         error: "yt-dlp failed",
         details: errOutput || `Exit code ${code}`,
       });
     }
+
     if (!rawOutput.trim()) {
       return res.status(500).json({
         error: "yt-dlp returned no data",
         details: errOutput,
       });
     }
+
     try {
       const info = JSON.parse(rawOutput.trim());
       const entry = info.entries?.[0] || info;
       res.json(pickOptions(entry));
     } catch (err) {
       console.error("JSON parse error:", err.message);
-      return res.status(500).json({
-        error: "Invalid yt-dlp JSON",
-        details: rawOutput.slice(0, 500),
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Invalid yt-dlp JSON",
+          details: rawOutput.slice(0, 500),
+        });
+      }
     }
   });
 
-  // ✅ FIX: Only send a response if one hasn't been sent already
   proc.on("error", (err) => {
     console.error("Spawn error:", err.message);
     if (!res.headersSent) {
@@ -139,23 +157,22 @@ app.get("/api/download", (req, res) => {
   const format = format_id || "best";
   const outFile = path.join(downloadsDir, `video-${Date.now()}.mp4`);
 
-  const args = [
-    url,
-    "-f", format,
-    "-o", "-", // stream to stdout
+  const args = buildArgs(url, [
+    "-f",
+    format,
+    "-o",
+    "-", // stream to stdout
     "--no-part",
     "--no-playlist",
-    "--merge-output-format", "mp4",
-  ];
+    "--merge-output-format",
+    "mp4",
+  ]);
 
   const cookiesPath = path.join(__dirname, "cookies.txt");
-  if (fs.existsSync(cookiesPath)) {
-    args.push("--cookies", cookiesPath);
-  }
+  if (fs.existsSync(cookiesPath)) args.push("--cookies", cookiesPath);
 
   const proc = spawn(ytDlpPath, args, { stdio: ["ignore", "pipe", "pipe"] });
 
-  // Headers for client download
   res.setHeader("Content-Disposition", "attachment; filename=video.mp4");
   res.setHeader("Content-Type", "video/mp4");
 
@@ -163,9 +180,7 @@ app.get("/api/download", (req, res) => {
   proc.stdout.pipe(res);
   proc.stdout.pipe(fileStream);
 
-  proc.stderr.on("data", (data) => {
-    console.error("yt-dlp stderr:", data.toString());
-  });
+  proc.stderr.on("data", (data) => console.error("yt-dlp stderr:", data.toString()));
 
   proc.on("error", (err) => {
     console.error("Download error:", err.message);
