@@ -56,7 +56,6 @@ const ErrorIcon = () => (
 );
 
 
-// --- Main App Component ---
 export default function App() {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -93,7 +92,6 @@ export default function App() {
 
   return (
     <>
-      {/* Add a style tag for custom animations */}
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
