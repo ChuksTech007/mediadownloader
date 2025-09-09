@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors({
-  origin: ["https://fastdownloader.onrender.com", "http://localhost:5173"]
+  origin: ["https://mediadownloader-api.onrender.com", "http://localhost:5173"]
 }));
 app.use(express.json());
 

@@ -63,10 +63,8 @@ export default function App() {
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState(null);
 
-  // In a real app, this would come from environment variables
 
-  // After (use your Render backend URL)
-  const serverUrl = "https://mediadownloader-app.onrender.com";
+  const serverUrl = "https://mediadownloaderapp.onrender.com";
   // const serverUrl = "http://localhost:5000";
 
   async function handleResolve(e) {
